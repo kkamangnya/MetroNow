@@ -1,0 +1,248 @@
+package com.takji.metronow.presentation.components
+
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.takji.metronow.domain.model.ArrivalSnapshot
+import com.takji.metronow.domain.model.MetroArrival
+import com.takji.metronow.domain.model.MetroPreset
+import com.takji.metronow.domain.model.StationNeighbors
+import com.takji.metronow.domain.model.WidgetAppearance
+
+private val WidgetText = Color(0xFFF3F7F4)
+private val WidgetMuted = Color(0xFF98A39C)
+
+@Composable
+fun MetroWidgetPreview(
+    preset: MetroPreset,
+    snapshot: ArrivalSnapshot?,
+    neighbors: StationNeighbors?,
+    appearance: WidgetAppearance,
+    directionHint: String? = null,
+    modifier: Modifier = Modifier,
+    onRefresh: (() -> Unit)? = null,
+) {
+    val lineColor = Color(preset.line.colorHex)
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(28.dp))
+            .background(Color(0xFF0B0E12).copy(alpha = appearance.backgroundOpacity))
+            .padding(horizontal = 20.dp, vertical = 18.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .size(38.dp)
+                    .clip(CircleShape)
+                    .background(lineColor),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(preset.line.number, color = Color.White, fontSize = 19.sp, fontWeight = FontWeight.Bold)
+            }
+            Spacer(Modifier.width(11.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    preset.line.displayName,
+                    color = WidgetText,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    "${preset.direction.label(preset.line)} · ${directionHint ?: "${neighbors?.next?.displayName?.removeSuffix("역") ?: "방면 확인"} 방면"}",
+                    color = WidgetMuted,
+                    fontSize = 12.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            if (snapshot?.isStale() == true) {
+                Text("오래된 정보", color = Color(0xFFFFC46B), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+            }
+        }
+
+        Spacer(Modifier.height(18.dp))
+        if (appearance.showProgress) {
+            StationLabels(neighbors)
+            Spacer(Modifier.height(7.dp))
+            MetroProgressLine(
+                color = lineColor,
+                trainProgress = snapshot?.primary?.firstOrNull()?.position?.progress ?: 0.39f,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(24.dp),
+            )
+            Spacer(Modifier.height(13.dp))
+        }
+
+        WidgetBody(snapshot, appearance.showSecondTrain)
+
+        if (appearance.showUpdateTime) {
+            Spacer(Modifier.height(14.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = snapshot?.ageText()?.let { "$it 업데이트" } ?: "업데이트 전",
+                    modifier = Modifier.weight(1f),
+                    color = WidgetMuted,
+                    fontSize = 11.sp,
+                )
+                if (onRefresh != null) {
+                    androidx.compose.material3.IconButton(
+                        onClick = onRefresh,
+                        modifier = Modifier.size(32.dp),
+                    ) {
+                        Icon(Icons.Rounded.Refresh, contentDescription = "새로고침", tint = WidgetText, modifier = Modifier.size(18.dp))
+                    }
+                } else {
+                    Icon(Icons.Rounded.Refresh, contentDescription = null, tint = WidgetMuted, modifier = Modifier.size(16.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun StationLabels(neighbors: StationNeighbors?) {
+    val names = listOf(
+        neighbors?.previous?.displayName?.removeSuffix("역") ?: "전역",
+        neighbors?.current?.displayName?.removeSuffix("역") ?: "현재역",
+        neighbors?.next?.displayName?.removeSuffix("역") ?: "다음역",
+    )
+    Row(Modifier.fillMaxWidth()) {
+        names.forEachIndexed { index, name ->
+            Text(
+                text = name,
+                modifier = Modifier.weight(1f),
+                color = if (index == 1) WidgetText else WidgetMuted,
+                fontSize = 11.sp,
+                fontWeight = if (index == 1) FontWeight.Bold else FontWeight.Normal,
+                textAlign = when (index) {
+                    0 -> TextAlign.Start
+                    1 -> TextAlign.Center
+                    else -> TextAlign.End
+                },
+                maxLines = 1,
+            )
+        }
+    }
+}
+
+@Composable
+private fun MetroProgressLine(color: Color, trainProgress: Float, modifier: Modifier = Modifier) {
+    Canvas(modifier) {
+        val centerY = size.height / 2f
+        val start = 6.dp.toPx()
+        val end = size.width - 6.dp.toPx()
+        drawLine(
+            color = color.copy(alpha = 0.52f),
+            start = Offset(start, centerY),
+            end = Offset(end, centerY),
+            strokeWidth = 2.dp.toPx(),
+            cap = StrokeCap.Round,
+        )
+        listOf(start, size.width / 2f, end).forEachIndexed { index, x ->
+            drawCircle(
+                color = if (index == 1) WidgetText else color,
+                radius = if (index == 1) 5.dp.toPx() else 4.dp.toPx(),
+                center = Offset(x, centerY),
+            )
+            if (index == 1) drawCircle(color = Color(0xFF0B0E12), radius = 2.2.dp.toPx(), center = Offset(x, centerY))
+        }
+        drawTrain(
+            center = Offset(start + (end - start) * trainProgress.coerceIn(0.05f, 0.95f), centerY),
+            color = color,
+        )
+    }
+}
+
+private fun DrawScope.drawTrain(center: Offset, color: Color) {
+    val width = 22.dp.toPx()
+    val height = 16.dp.toPx()
+    drawRoundRect(
+        color = color,
+        topLeft = Offset(center.x - width / 2, center.y - height / 2),
+        size = Size(width, height),
+        cornerRadius = CornerRadius(5.dp.toPx()),
+    )
+    drawRoundRect(
+        color = Color(0xFF0B0E12),
+        topLeft = Offset(center.x - width * 0.28f, center.y - height * 0.24f),
+        size = Size(width * 0.56f, height * 0.28f),
+        cornerRadius = CornerRadius(1.5.dp.toPx()),
+    )
+    drawCircle(Color(0xFFF3F7F4), 1.4.dp.toPx(), Offset(center.x - width * 0.25f, center.y + height * 0.22f))
+    drawCircle(Color(0xFFF3F7F4), 1.4.dp.toPx(), Offset(center.x + width * 0.25f, center.y + height * 0.22f))
+}
+
+@Composable
+private fun WidgetBody(snapshot: ArrivalSnapshot?, showSecond: Boolean) {
+    when {
+        snapshot?.isLoading == true && snapshot.primary.isEmpty() -> {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = WidgetMuted)
+                Spacer(Modifier.width(9.dp))
+                Text("실시간 정보를 불러오는 중", color = WidgetMuted, fontSize = 13.sp)
+            }
+        }
+        snapshot?.apiKeyMissing == true -> StatusMessage("앱에서 API 키를 설정하세요")
+        snapshot?.errorMessage != null && snapshot.primary.isEmpty() -> StatusMessage(snapshot.errorMessage)
+        snapshot == null || snapshot.primary.isEmpty() -> StatusMessage("도착정보를 새로고침하세요")
+        else -> {
+            snapshot.primary.take(if (showSecond) 2 else 1).forEachIndexed { index, arrival ->
+                if (index > 0) Spacer(Modifier.height(8.dp))
+                ArrivalRow(arrival)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ArrivalRow(arrival: MetroArrival) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(arrival.statusText, color = WidgetText, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+            Text(arrival.destination, color = WidgetMuted, fontSize = 11.sp, maxLines = 1)
+        }
+        Text(
+            arrival.etaText(),
+            color = WidgetText,
+            fontSize = 21.sp,
+            fontWeight = FontWeight.Bold,
+        )
+    }
+}
+
+@Composable
+private fun StatusMessage(message: String) {
+    Text(message, color = WidgetMuted, fontSize = 13.sp, modifier = Modifier.padding(vertical = 8.dp))
+}

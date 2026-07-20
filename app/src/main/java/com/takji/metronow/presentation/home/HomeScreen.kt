@@ -92,8 +92,10 @@ fun HomeScreen(
                 preset = preset,
                 snapshot = state.snapshot,
                 neighbors = catalog.neighbors(preset.stationId, preset.direction),
+                oppositeNeighbors = catalog.neighbors(preset.stationId, preset.direction.opposite()),
                 appearance = state.settings.appearance,
                 directionHint = catalog.directionHint(preset.stationId, preset.direction),
+                oppositeDirectionHint = catalog.directionHint(preset.stationId, preset.direction.opposite()),
                 modifier = Modifier.fillMaxWidth(),
                 onRefresh = onRefresh,
             )

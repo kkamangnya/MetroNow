@@ -11,6 +11,7 @@ import com.takji.metronow.domain.model.MetroLine
 import com.takji.metronow.domain.model.MetroPreset
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -57,6 +58,25 @@ class MetroRepositoryTest {
         assertTrue(snapshot.apiKeyMissing)
         assertEquals("앱에서 API 키를 설정하세요", snapshot.errorMessage)
         assertEquals(0, remote.calls)
+    }
+
+    @Test
+    fun keepsOppositeDirectionWhenPrimaryHasNoArrivals() = runTest {
+        val repository = MetroRepository(
+            FakeRemote(
+                MetroArrivalResponse(
+                    errorMessage = SeoulApiMessageDto(code = "INFO-000", message = "정상 처리되었습니다."),
+                    arrivals = listOf(arrival("내선", "90", "2202")),
+                ),
+            ),
+            MetroArrivalMapper(),
+        )
+
+        val snapshot = repository.fetchSnapshot(preset, "sample")
+
+        assertTrue(snapshot.primary.isEmpty())
+        assertEquals(listOf("2202"), snapshot.opposite.map { it.trainNumber })
+        assertNull(snapshot.errorMessage)
     }
 
     @Test

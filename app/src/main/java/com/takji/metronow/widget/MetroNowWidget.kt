@@ -1,6 +1,7 @@
 package com.takji.metronow.widget
 
 import android.appwidget.AppWidgetManager
+import android.content.ComponentName
 import android.content.Context
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
@@ -45,6 +46,7 @@ import androidx.glance.unit.ColorProvider
 import com.takji.metronow.MetroNowApplication
 import com.takji.metronow.R
 import com.takji.metronow.domain.model.ArrivalSnapshot
+import com.takji.metronow.domain.model.Direction
 import com.takji.metronow.domain.model.MetroArrival
 import com.takji.metronow.domain.model.MetroPreset
 import com.takji.metronow.domain.model.StationNeighbors
@@ -63,12 +65,28 @@ class MetroNowWidget : GlanceAppWidget() {
         val app = context.applicationContext as MetroNowApplication
         val settings = app.settingsStore.current()
         val platformId = runCatching { GlanceAppWidgetManager(context).getAppWidgetId(id) }
-            .getOrDefault(AppWidgetManager.INVALID_APPWIDGET_ID)
-        val presetId = settings.widgetBindings[platformId]
+            .getOrElse {
+                AppWidgetManager.getInstance(context)
+                    .getAppWidgetIds(ComponentName(context, MetroNowWidgetReceiver::class.java))
+                    .singleOrNull()
+                    ?: AppWidgetManager.INVALID_APPWIDGET_ID
+            }
+
+        var presetId = settings.widgetBindings[platformId]
+        if (presetId == null && platformId != AppWidgetManager.INVALID_APPWIDGET_ID && settings.presets.size == 1) {
+            presetId = settings.presets.single().id
+            app.settingsStore.bindWidget(platformId, presetId)
+        }
+        if (presetId == null && platformId == AppWidgetManager.INVALID_APPWIDGET_ID && settings.widgetBindings.size == 1) {
+            presetId = settings.widgetBindings.values.single()
+        }
+
         val preset = settings.presets.firstOrNull { it.id == presetId }
         val snapshot = preset?.let { settings.snapshots[it.id] }
-        val neighbors = preset?.let { app.stationCatalog.neighbors(it.stationId, it.direction) }
-        val directionHint = preset?.let { app.stationCatalog.directionHint(it.stationId, it.direction) }
+        val primaryNeighbors = preset?.let { app.stationCatalog.neighbors(it.stationId, it.direction) }
+        val oppositeNeighbors = preset?.let { app.stationCatalog.neighbors(it.stationId, it.direction.opposite()) }
+        val primaryHint = preset?.let { app.stationCatalog.directionHint(it.stationId, it.direction) }
+        val oppositeHint = preset?.let { app.stationCatalog.directionHint(it.stationId, it.direction.opposite()) }
         val configureAction = actionStartActivity<MetroNowWidgetConfigurationActivity>(
             actionParametersOf(
                 MetroNowWidgetConfigurationActivity.WidgetIdActionKey to platformId,
@@ -80,9 +98,11 @@ class MetroNowWidget : GlanceAppWidget() {
                 appWidgetId = platformId,
                 preset = preset,
                 snapshot = snapshot,
-                neighbors = neighbors,
+                primaryNeighbors = primaryNeighbors,
+                oppositeNeighbors = oppositeNeighbors,
                 appearance = settings.appearance,
-                directionHint = directionHint,
+                primaryHint = primaryHint,
+                oppositeHint = oppositeHint,
                 configureAction = configureAction,
             )
         }
@@ -94,198 +114,327 @@ private fun MetroNowWidgetContent(
     appWidgetId: Int,
     preset: MetroPreset?,
     snapshot: ArrivalSnapshot?,
-    neighbors: StationNeighbors?,
+    primaryNeighbors: StationNeighbors?,
+    oppositeNeighbors: StationNeighbors?,
     appearance: WidgetAppearance,
-    directionHint: String?,
+    primaryHint: String?,
+    oppositeHint: String?,
     configureAction: Action,
 ) {
     val size = LocalSize.current
-    val small = size.width < 230.dp || size.height < 125.dp
-    val large = size.height >= 205.dp || size.width >= 350.dp
+    val compact = size.width < 230.dp || size.height < 125.dp
+    val expanded = size.height >= 190.dp || size.width >= 350.dp
     val opacity = (appearance.backgroundOpacity.coerceIn(0.65f, 1f) * 255).toInt()
-    val backgroundArgb = (opacity shl 24) or 0x000B0E12
+    val backgroundArgb = (opacity shl 24) or 0x00090D11
     val background = ColorProvider(Color(backgroundArgb))
-    val primaryText = ColorProvider(Color(0xFFF3F7F4))
-    val mutedText = ColorProvider(Color(0xFF9AA59E))
+    val panel = ColorProvider(Color(0xFF151B20))
+    val primaryText = ColorProvider(Color(0xFFF4F7F5))
+    val mutedText = ColorProvider(Color(0xFF93A099))
 
     val rootModifier = GlanceModifier
-            .fillMaxSize()
-            .cornerRadius(28.dp)
-            .background(background)
-            .padding(if (small) 14.dp else 18.dp)
-            .let { if (preset == null) it.clickable(configureAction) else it }
+        .fillMaxSize()
+        .cornerRadius(26.dp)
+        .background(background)
+        .padding(horizontal = if (compact) 11.dp else 14.dp, vertical = if (compact) 9.dp else 11.dp)
+        .let { if (preset == null) it.clickable(configureAction) else it }
+
     Column(modifier = rootModifier) {
         if (preset == null) {
             Text("MetroNow", style = TextStyle(color = primaryText, fontWeight = FontWeight.Bold, fontSize = 18.sp))
-            Spacer(GlanceModifier.height(8.dp))
-            Text("앱에서 위젯 프리셋을 선택하세요", style = TextStyle(color = mutedText, fontSize = 12.sp))
+            Spacer(GlanceModifier.height(7.dp))
+            Text("탭하여 이 위젯의 프리셋을 선택하세요", style = TextStyle(color = mutedText, fontSize = 11.sp))
             return@Column
         }
 
         val lineColor = ColorProvider(Color(preset.line.colorHex))
-        Header(preset, neighbors, directionHint, lineColor, primaryText, mutedText, small)
-        Spacer(GlanceModifier.height(if (small) 8.dp else 12.dp))
+        WidgetHeader(
+            appWidgetId = appWidgetId,
+            preset = preset,
+            snapshot = snapshot,
+            lineColor = lineColor,
+            primaryText = primaryText,
+            mutedText = mutedText,
+            compact = compact,
+            showUpdateTime = appearance.showUpdateTime,
+        )
+        Spacer(GlanceModifier.height(if (compact) 5.dp else 7.dp))
 
-        if (!small && appearance.showProgress) {
-            StationNames(neighbors, primaryText, mutedText)
-            Spacer(GlanceModifier.height(3.dp))
-            TransitLine(snapshot?.primary?.firstOrNull(), lineColor)
-            Spacer(GlanceModifier.height(8.dp))
-        }
-
+        val hasArrivals = snapshot?.primary?.isNotEmpty() == true || snapshot?.opposite?.isNotEmpty() == true
         when {
-            snapshot?.isLoading == true && snapshot.primary.isEmpty() -> StatusText("불러오는 중…", mutedText)
+            snapshot?.isLoading == true && !hasArrivals -> StatusText("양방향 실시간 정보를 불러오는 중…", mutedText)
             snapshot?.apiKeyMissing == true -> StatusText("앱에서 API 키를 설정하세요", mutedText)
-            snapshot?.errorMessage != null && snapshot.primary.isEmpty() -> StatusText(snapshot.errorMessage, mutedText)
-            snapshot == null || snapshot.primary.isEmpty() -> StatusText("새로고침하여 도착정보 확인", mutedText)
+            snapshot == null -> StatusText("새로고침하여 양방향 도착정보 확인", mutedText)
             else -> {
-                val count = when {
-                    small -> 1
-                    large -> 3
-                    appearance.showSecondTrain -> 2
-                    else -> 1
-                }
-                ArrivalRows(snapshot.primary.take(count), primaryText, mutedText)
-                if (large && snapshot.opposite.isNotEmpty()) {
-                    Spacer(GlanceModifier.height(8.dp))
-                    Text(
-                        preset.direction.opposite().label(preset.line),
-                        style = TextStyle(color = lineColor, fontSize = 11.sp, fontWeight = FontWeight.Bold),
+                val emptyMessage = snapshot.errorMessage
+                    ?.let { if (it.length <= 12) it else "정보를 불러올 수 없음" }
+                    ?: "도착정보 없음"
+                if (!compact && appearance.showProgress) {
+                    DualStationNames(primaryNeighbors, oppositeNeighbors, primaryText, mutedText)
+                    Spacer(GlanceModifier.height(2.dp))
+                    DualTransitLine(
+                        primary = snapshot.primary.firstOrNull(),
+                        opposite = snapshot.opposite.firstOrNull(),
+                        lineColor = lineColor,
                     )
                     Spacer(GlanceModifier.height(4.dp))
-                    ArrivalRows(snapshot.opposite.take(2), primaryText, mutedText)
                 }
-            }
-        }
 
-        if (!small && appearance.showUpdateTime) {
-            Spacer(GlanceModifier.defaultWeight())
-            Row(verticalAlignment = Alignment.Vertical.CenterVertically) {
-                Text(
-                    snapshot?.ageText()?.let { "$it 업데이트" } ?: "업데이트 전",
-                    modifier = GlanceModifier.defaultWeight(),
-                    style = TextStyle(
-                        color = if (snapshot?.isStale() == true) ColorProvider(Color(0xFFFFC46B)) else mutedText,
-                        fontSize = 10.sp,
-                    ),
-                )
-                Image(
-                    provider = ImageProvider(R.drawable.ic_refresh),
-                    contentDescription = "새로고침",
-                    modifier = GlanceModifier
-                        .size(26.dp)
-                        .clickable(
-                            actionRunCallback<RefreshWidgetAction>(
-                                actionParametersOf(RefreshWidgetAction.WidgetIdKey to appWidgetId),
-                            ),
-                        ),
-                )
+                Row(GlanceModifier.fillMaxWidth()) {
+                    DirectionPanel(
+                        direction = preset.direction,
+                        lineName = preset.line,
+                        hint = primaryHint,
+                        arrivals = snapshot.primary,
+                        arrow = "←",
+                        lineColor = lineColor,
+                        panel = panel,
+                        primaryText = primaryText,
+                        mutedText = mutedText,
+                        compact = compact,
+                        showSecond = expanded && appearance.showSecondTrain,
+                        emptyMessage = emptyMessage,
+                        modifier = GlanceModifier.defaultWeight(),
+                    )
+                    Spacer(GlanceModifier.width(7.dp))
+                    DirectionPanel(
+                        direction = preset.direction.opposite(),
+                        lineName = preset.line,
+                        hint = oppositeHint,
+                        arrivals = snapshot.opposite,
+                        arrow = "→",
+                        lineColor = lineColor,
+                        panel = panel,
+                        primaryText = primaryText,
+                        mutedText = mutedText,
+                        compact = compact,
+                        showSecond = expanded && appearance.showSecondTrain,
+                        emptyMessage = emptyMessage,
+                        modifier = GlanceModifier.defaultWeight(),
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
-private fun Header(
+private fun WidgetHeader(
+    appWidgetId: Int,
     preset: MetroPreset,
-    neighbors: StationNeighbors?,
-    directionHint: String?,
+    snapshot: ArrivalSnapshot?,
     lineColor: ColorProvider,
     primaryText: ColorProvider,
     mutedText: ColorProvider,
-    small: Boolean,
+    compact: Boolean,
+    showUpdateTime: Boolean,
 ) {
-    Row(verticalAlignment = Alignment.Vertical.CenterVertically) {
+    Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.Vertical.CenterVertically) {
         Box(
             modifier = GlanceModifier
-                .size(if (small) 30.dp else 36.dp)
-                .cornerRadius(18.dp)
+                .size(if (compact) 27.dp else 31.dp)
+                .cornerRadius(16.dp)
                 .background(lineColor),
             contentAlignment = Alignment.Center,
         ) {
             Text(
                 preset.line.number,
-                style = TextStyle(color = ColorProvider(Color.White), fontWeight = FontWeight.Bold, fontSize = if (small) 15.sp else 18.sp),
+                style = TextStyle(
+                    color = ColorProvider(Color.White),
+                    fontWeight = FontWeight.Bold,
+                    fontSize = if (compact) 14.sp else 16.sp,
+                ),
             )
         }
-        Spacer(GlanceModifier.width(9.dp))
+        Spacer(GlanceModifier.width(8.dp))
         Column(GlanceModifier.defaultWeight()) {
             Text(
-                if (small) preset.stationDisplayName else preset.line.displayName,
-                style = TextStyle(color = primaryText, fontWeight = FontWeight.Bold, fontSize = if (small) 15.sp else 14.sp),
+                preset.stationDisplayName,
+                style = TextStyle(color = primaryText, fontWeight = FontWeight.Bold, fontSize = if (compact) 14.sp else 15.sp),
                 maxLines = 1,
             )
-            Text(
-                "${preset.direction.label(preset.line)} · ${directionHint ?: "${neighbors?.next?.displayName?.removeSuffix("역") ?: ""} 방면"}",
-                style = TextStyle(color = mutedText, fontSize = 10.sp),
-                maxLines = 1,
-            )
+            if (!compact) {
+                Text(
+                    "${preset.line.displayName} · 양방향",
+                    style = TextStyle(color = mutedText, fontSize = 9.sp),
+                    maxLines = 1,
+                )
+            }
         }
+        if (showUpdateTime && !compact) {
+            Text(
+                snapshot?.ageText() ?: "업데이트 전",
+                style = TextStyle(
+                    color = if (snapshot?.isStale() == true) ColorProvider(Color(0xFFFFC46B)) else mutedText,
+                    fontSize = 9.sp,
+                ),
+                maxLines = 1,
+            )
+            Spacer(GlanceModifier.width(4.dp))
+        }
+        Image(
+            provider = ImageProvider(R.drawable.ic_refresh),
+            contentDescription = "양방향 정보 새로고침",
+            modifier = GlanceModifier
+                .size(if (compact) 22.dp else 24.dp)
+                .clickable(
+                    actionRunCallback<RefreshWidgetAction>(
+                        actionParametersOf(RefreshWidgetAction.WidgetIdKey to appWidgetId),
+                    ),
+                ),
+        )
     }
 }
 
 @Composable
-private fun StationNames(neighbors: StationNeighbors?, primaryText: ColorProvider, mutedText: ColorProvider) {
+private fun DualStationNames(
+    primaryNeighbors: StationNeighbors?,
+    oppositeNeighbors: StationNeighbors?,
+    primaryText: ColorProvider,
+    mutedText: ColorProvider,
+) {
     Row(GlanceModifier.fillMaxWidth()) {
         Text(
-            neighbors?.previous?.displayName?.removeSuffix("역") ?: "전역",
+            primaryNeighbors?.previous?.displayName?.removeSuffix("역") ?: "한쪽 전역",
             modifier = GlanceModifier.defaultWeight(),
-            style = TextStyle(color = mutedText, fontSize = 10.sp, textAlign = TextAlign.Start),
+            style = TextStyle(color = mutedText, fontSize = 9.sp, textAlign = TextAlign.Start),
             maxLines = 1,
         )
         Text(
-            neighbors?.current?.displayName?.removeSuffix("역") ?: "현재역",
+            primaryNeighbors?.current?.displayName?.removeSuffix("역") ?: "현재역",
             modifier = GlanceModifier.defaultWeight(),
-            style = TextStyle(color = primaryText, fontSize = 10.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center),
+            style = TextStyle(color = primaryText, fontSize = 9.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center),
             maxLines = 1,
         )
         Text(
-            neighbors?.next?.displayName?.removeSuffix("역") ?: "다음역",
+            oppositeNeighbors?.previous?.displayName?.removeSuffix("역") ?: "반대 전역",
             modifier = GlanceModifier.defaultWeight(),
-            style = TextStyle(color = mutedText, fontSize = 10.sp, textAlign = TextAlign.End),
+            style = TextStyle(color = mutedText, fontSize = 9.sp, textAlign = TextAlign.End),
             maxLines = 1,
         )
     }
 }
 
 @Composable
-private fun TransitLine(arrival: MetroArrival?, lineColor: ColorProvider) {
+private fun DualTransitLine(primary: MetroArrival?, opposite: MetroArrival?, lineColor: ColorProvider) {
     Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.Vertical.CenterVertically) {
-        Text("●", style = TextStyle(color = lineColor, fontSize = 9.sp))
-        val align = when {
-            (arrival?.position?.progress ?: 0.39f) < 0.34f -> Alignment.CenterStart
-            (arrival?.position?.progress ?: 0.39f) < 0.61f -> Alignment.Center
-            else -> Alignment.CenterEnd
-        }
+        Text("●", style = TextStyle(color = lineColor, fontSize = 8.sp))
+        TransitHalf(primary, lineColor, towardCenter = true, modifier = GlanceModifier.defaultWeight())
         Box(
-            modifier = GlanceModifier.defaultWeight().height(22.dp),
-            contentAlignment = align,
+            modifier = GlanceModifier.size(12.dp).cornerRadius(6.dp).background(ColorProvider(Color(0xFFF4F7F5))),
+            contentAlignment = Alignment.Center,
         ) {
-            Spacer(GlanceModifier.fillMaxWidth().height(2.dp).background(lineColor))
+            Box(GlanceModifier.size(5.dp).cornerRadius(3.dp).background(ColorProvider(Color(0xFF0B0F13)))) {}
+        }
+        TransitHalf(opposite, lineColor, towardCenter = false, modifier = GlanceModifier.defaultWeight())
+        Text("●", style = TextStyle(color = lineColor, fontSize = 8.sp))
+    }
+}
+
+@Composable
+private fun TransitHalf(
+    arrival: MetroArrival?,
+    lineColor: ColorProvider,
+    towardCenter: Boolean,
+    modifier: GlanceModifier,
+) {
+    val progress = arrival?.position?.progress ?: 0.12f
+    val nearCurrent = progress >= 0.44f
+    val mid = progress >= 0.28f
+    val alignment = when {
+        towardCenter && nearCurrent -> Alignment.CenterEnd
+        towardCenter && mid -> Alignment.Center
+        towardCenter -> Alignment.CenterStart
+        !towardCenter && nearCurrent -> Alignment.CenterStart
+        !towardCenter && mid -> Alignment.Center
+        else -> Alignment.CenterEnd
+    }
+    Box(
+        modifier = modifier.height(19.dp),
+        contentAlignment = alignment,
+    ) {
+        Spacer(GlanceModifier.fillMaxWidth().height(2.dp).background(lineColor))
+        if (arrival != null) {
             Image(
                 provider = ImageProvider(R.drawable.ic_train),
                 contentDescription = null,
                 contentScale = ContentScale.Fit,
-                modifier = GlanceModifier.size(20.dp),
+                modifier = GlanceModifier.size(17.dp),
             )
         }
-        Text("●", style = TextStyle(color = lineColor, fontSize = 9.sp))
-        Spacer(GlanceModifier.width(4.dp))
-        Text("●", style = TextStyle(color = lineColor, fontSize = 9.sp))
     }
 }
 
 @Composable
-private fun ArrivalRows(arrivals: List<MetroArrival>, primaryText: ColorProvider, mutedText: ColorProvider) {
-    arrivals.forEachIndexed { index, arrival ->
-        if (index > 0) Spacer(GlanceModifier.height(4.dp))
-        Row(verticalAlignment = Alignment.Vertical.CenterVertically) {
-            Column(GlanceModifier.defaultWeight()) {
-                Text(arrival.statusText, style = TextStyle(color = primaryText, fontSize = 11.sp, fontWeight = FontWeight.Bold), maxLines = 1)
-                Text(arrival.destination, style = TextStyle(color = mutedText, fontSize = 9.sp), maxLines = 1)
-            }
-            Text(arrival.etaText(), style = TextStyle(color = primaryText, fontSize = 16.sp, fontWeight = FontWeight.Bold))
+private fun DirectionPanel(
+    direction: Direction,
+    lineName: com.takji.metronow.domain.model.MetroLine,
+    hint: String?,
+    arrivals: List<MetroArrival>,
+    arrow: String,
+    lineColor: ColorProvider,
+    panel: ColorProvider,
+    primaryText: ColorProvider,
+    mutedText: ColorProvider,
+    compact: Boolean,
+    showSecond: Boolean,
+    emptyMessage: String,
+    modifier: GlanceModifier,
+) {
+    Column(
+        modifier = modifier
+            .cornerRadius(13.dp)
+            .background(panel)
+            .padding(horizontal = if (compact) 7.dp else 9.dp, vertical = if (compact) 6.dp else 7.dp),
+    ) {
+        Text(
+            "$arrow ${direction.label(lineName)}",
+            style = TextStyle(color = lineColor, fontWeight = FontWeight.Bold, fontSize = if (compact) 9.sp else 10.sp),
+            maxLines = 1,
+        )
+        if (!compact) {
+            Text(
+                hint.orEmpty().removeSuffix(" 방면"),
+                style = TextStyle(color = mutedText, fontSize = 8.sp),
+                maxLines = 1,
+            )
+            Spacer(GlanceModifier.height(3.dp))
         }
+        if (arrivals.isEmpty()) {
+            Text(emptyMessage, style = TextStyle(color = mutedText, fontSize = 9.sp), maxLines = 1)
+        } else {
+            CompactArrival(arrivals.first(), primaryText, mutedText, compact)
+            if (showSecond && arrivals.size > 1) {
+                Spacer(GlanceModifier.height(4.dp))
+                CompactArrival(arrivals[1], primaryText, mutedText, compact = false)
+            }
+        }
+    }
+}
+
+@Composable
+private fun CompactArrival(
+    arrival: MetroArrival,
+    primaryText: ColorProvider,
+    mutedText: ColorProvider,
+    compact: Boolean,
+) {
+    Row(verticalAlignment = Alignment.Vertical.CenterVertically) {
+        Column(GlanceModifier.defaultWeight()) {
+            Text(
+                arrival.statusText,
+                style = TextStyle(color = primaryText, fontSize = if (compact) 8.sp else 9.sp, fontWeight = FontWeight.Bold),
+                maxLines = 1,
+            )
+            if (!compact) {
+                Text(arrival.destination, style = TextStyle(color = mutedText, fontSize = 8.sp), maxLines = 1)
+            }
+        }
+        Spacer(GlanceModifier.width(3.dp))
+        Text(
+            arrival.etaText(),
+            style = TextStyle(color = primaryText, fontSize = if (compact) 13.sp else 15.sp, fontWeight = FontWeight.Bold),
+            maxLines = 1,
+        )
     }
 }
 
@@ -296,7 +445,9 @@ private fun StatusText(message: String, mutedText: ColorProvider) {
 
 class RefreshWidgetAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
-        val appWidgetId = parameters[WidgetIdKey]
+        val requestedId = parameters[WidgetIdKey]
+        val appWidgetId = requestedId?.takeIf { it != AppWidgetManager.INVALID_APPWIDGET_ID }
+            ?: runCatching { GlanceAppWidgetManager(context).getAppWidgetId(glanceId) }.getOrNull()
         val app = context.applicationContext as MetroNowApplication
         app.widgetScheduler.refreshNow(appWidgetId)
     }

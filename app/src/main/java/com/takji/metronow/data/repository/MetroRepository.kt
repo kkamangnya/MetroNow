@@ -41,7 +41,7 @@ class MetroRepository(
                 fetchedAtMillis = nowMillis,
                 primary = primary,
                 opposite = opposite,
-                errorMessage = if (primary.isEmpty()) "해당 방향의 도착정보가 없습니다" else null,
+                errorMessage = if (primary.isEmpty() && opposite.isEmpty()) "양방향 도착정보가 없습니다" else null,
             )
         } catch (error: Throwable) {
             ArrivalSnapshot(

@@ -236,8 +236,10 @@ private fun ReviewStep(catalog: StationCatalog, apiKey: String, line: MetroLine,
         preset = preset,
         snapshot = previewSnapshot,
         neighbors = catalog.neighbors(station.id, direction),
+        oppositeNeighbors = catalog.neighbors(station.id, direction.opposite()),
         appearance = com.takji.metronow.domain.model.WidgetAppearance(),
         directionHint = catalog.directionHint(station.id, direction),
+        oppositeDirectionHint = catalog.directionHint(station.id, direction.opposite()),
         modifier = Modifier.fillMaxWidth(),
     )
 }

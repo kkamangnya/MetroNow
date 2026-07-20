@@ -35,7 +35,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.takji.metronow.domain.model.ArrivalSnapshot
+import com.takji.metronow.domain.model.Direction
 import com.takji.metronow.domain.model.MetroArrival
+import com.takji.metronow.domain.model.MetroLine
 import com.takji.metronow.domain.model.MetroPreset
 import com.takji.metronow.domain.model.StationNeighbors
 import com.takji.metronow.domain.model.WidgetAppearance
@@ -48,8 +50,10 @@ fun MetroWidgetPreview(
     preset: MetroPreset,
     snapshot: ArrivalSnapshot?,
     neighbors: StationNeighbors?,
+    oppositeNeighbors: StationNeighbors? = null,
     appearance: WidgetAppearance,
     directionHint: String? = null,
+    oppositeDirectionHint: String? = null,
     modifier: Modifier = Modifier,
     onRefresh: (() -> Unit)? = null,
 ) {
@@ -73,13 +77,13 @@ fun MetroWidgetPreview(
             Spacer(Modifier.width(11.dp))
             Column(Modifier.weight(1f)) {
                 Text(
-                    preset.line.displayName,
+                    preset.stationDisplayName,
                     color = WidgetText,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
                 )
                 Text(
-                    "${preset.direction.label(preset.line)} · ${directionHint ?: "${neighbors?.next?.displayName?.removeSuffix("역") ?: "방면 확인"} 방면"}",
+                    "${preset.line.displayName} · 양방향",
                     color = WidgetMuted,
                     fontSize = 12.sp,
                     maxLines = 1,
@@ -93,11 +97,12 @@ fun MetroWidgetPreview(
 
         Spacer(Modifier.height(18.dp))
         if (appearance.showProgress) {
-            StationLabels(neighbors)
+            StationLabels(neighbors, oppositeNeighbors)
             Spacer(Modifier.height(7.dp))
             MetroProgressLine(
                 color = lineColor,
-                trainProgress = snapshot?.primary?.firstOrNull()?.position?.progress ?: 0.39f,
+                primaryProgress = snapshot?.primary?.firstOrNull()?.position?.progress,
+                oppositeProgress = snapshot?.opposite?.firstOrNull()?.position?.progress,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(24.dp),
@@ -105,7 +110,13 @@ fun MetroWidgetPreview(
             Spacer(Modifier.height(13.dp))
         }
 
-        WidgetBody(snapshot, appearance.showSecondTrain)
+        WidgetBody(
+            snapshot = snapshot,
+            preset = preset,
+            directionHint = directionHint,
+            oppositeDirectionHint = oppositeDirectionHint,
+            showSecond = appearance.showSecondTrain,
+        )
 
         if (appearance.showUpdateTime) {
             Spacer(Modifier.height(14.dp))
@@ -132,11 +143,11 @@ fun MetroWidgetPreview(
 }
 
 @Composable
-private fun StationLabels(neighbors: StationNeighbors?) {
+private fun StationLabels(neighbors: StationNeighbors?, oppositeNeighbors: StationNeighbors?) {
     val names = listOf(
         neighbors?.previous?.displayName?.removeSuffix("역") ?: "전역",
         neighbors?.current?.displayName?.removeSuffix("역") ?: "현재역",
-        neighbors?.next?.displayName?.removeSuffix("역") ?: "다음역",
+        oppositeNeighbors?.previous?.displayName?.removeSuffix("역") ?: "반대 전역",
     )
     Row(Modifier.fillMaxWidth()) {
         names.forEachIndexed { index, name ->
@@ -158,11 +169,17 @@ private fun StationLabels(neighbors: StationNeighbors?) {
 }
 
 @Composable
-private fun MetroProgressLine(color: Color, trainProgress: Float, modifier: Modifier = Modifier) {
+private fun MetroProgressLine(
+    color: Color,
+    primaryProgress: Float?,
+    oppositeProgress: Float?,
+    modifier: Modifier = Modifier,
+) {
     Canvas(modifier) {
         val centerY = size.height / 2f
         val start = 6.dp.toPx()
         val end = size.width - 6.dp.toPx()
+        val center = size.width / 2f
         drawLine(
             color = color.copy(alpha = 0.52f),
             start = Offset(start, centerY),
@@ -178,10 +195,18 @@ private fun MetroProgressLine(color: Color, trainProgress: Float, modifier: Modi
             )
             if (index == 1) drawCircle(color = Color(0xFF0B0E12), radius = 2.2.dp.toPx(), center = Offset(x, centerY))
         }
-        drawTrain(
-            center = Offset(start + (end - start) * trainProgress.coerceIn(0.05f, 0.95f), centerY),
-            color = color,
-        )
+        primaryProgress?.let { progress ->
+            drawTrain(
+                center = Offset(start + (center - start) * (progress * 2f).coerceIn(0.06f, 0.94f), centerY),
+                color = color,
+            )
+        }
+        oppositeProgress?.let { progress ->
+            drawTrain(
+                center = Offset(end - (end - center) * (progress * 2f).coerceIn(0.06f, 0.94f), centerY),
+                color = color,
+            )
+        }
     }
 }
 
@@ -205,21 +230,92 @@ private fun DrawScope.drawTrain(center: Offset, color: Color) {
 }
 
 @Composable
-private fun WidgetBody(snapshot: ArrivalSnapshot?, showSecond: Boolean) {
+private fun WidgetBody(
+    snapshot: ArrivalSnapshot?,
+    preset: MetroPreset,
+    directionHint: String?,
+    oppositeDirectionHint: String?,
+    showSecond: Boolean,
+) {
+    val hasArrivals = snapshot?.primary?.isNotEmpty() == true || snapshot?.opposite?.isNotEmpty() == true
     when {
-        snapshot?.isLoading == true && snapshot.primary.isEmpty() -> {
+        snapshot?.isLoading == true && !hasArrivals -> {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = WidgetMuted)
                 Spacer(Modifier.width(9.dp))
-                Text("실시간 정보를 불러오는 중", color = WidgetMuted, fontSize = 13.sp)
+                Text("양방향 실시간 정보를 불러오는 중", color = WidgetMuted, fontSize = 13.sp)
             }
         }
         snapshot?.apiKeyMissing == true -> StatusMessage("앱에서 API 키를 설정하세요")
-        snapshot?.errorMessage != null && snapshot.primary.isEmpty() -> StatusMessage(snapshot.errorMessage)
-        snapshot == null || snapshot.primary.isEmpty() -> StatusMessage("도착정보를 새로고침하세요")
+        snapshot == null -> StatusMessage("양방향 도착정보를 새로고침하세요")
         else -> {
-            snapshot.primary.take(if (showSecond) 2 else 1).forEachIndexed { index, arrival ->
-                if (index > 0) Spacer(Modifier.height(8.dp))
+            val emptyMessage = snapshot.errorMessage
+                ?.let { if (it.length <= 12) it else "정보를 불러올 수 없음" }
+                ?: "도착정보 없음"
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                DirectionCard(
+                    direction = preset.direction,
+                    line = preset.line,
+                    hint = directionHint,
+                    arrow = "←",
+                    arrivals = snapshot.primary,
+                    showSecond = showSecond,
+                    emptyMessage = emptyMessage,
+                    modifier = Modifier.weight(1f),
+                )
+                DirectionCard(
+                    direction = preset.direction.opposite(),
+                    line = preset.line,
+                    hint = oppositeDirectionHint,
+                    arrow = "→",
+                    arrivals = snapshot.opposite,
+                    showSecond = showSecond,
+                    emptyMessage = emptyMessage,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DirectionCard(
+    direction: Direction,
+    line: MetroLine,
+    hint: String?,
+    arrow: String,
+    arrivals: List<MetroArrival>,
+    showSecond: Boolean,
+    emptyMessage: String,
+    modifier: Modifier = Modifier,
+) {
+    val lineColor = Color(line.colorHex)
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color.White.copy(alpha = 0.055f))
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+    ) {
+        Text(
+            "$arrow ${direction.label(line)}",
+            color = lineColor,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+        )
+        Text(
+            hint.orEmpty().removeSuffix(" 방면"),
+            color = WidgetMuted,
+            fontSize = 9.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Spacer(Modifier.height(7.dp))
+        if (arrivals.isEmpty()) {
+            Text(emptyMessage, color = WidgetMuted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        } else {
+            arrivals.take(if (showSecond) 2 else 1).forEachIndexed { index, arrival ->
+                if (index > 0) Spacer(Modifier.height(7.dp))
                 ArrivalRow(arrival)
             }
         }
@@ -230,13 +326,13 @@ private fun WidgetBody(snapshot: ArrivalSnapshot?, showSecond: Boolean) {
 private fun ArrivalRow(arrival: MetroArrival) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
-            Text(arrival.statusText, color = WidgetText, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
-            Text(arrival.destination, color = WidgetMuted, fontSize = 11.sp, maxLines = 1)
+            Text(arrival.statusText, color = WidgetText, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+            Text(arrival.destination, color = WidgetMuted, fontSize = 9.sp, maxLines = 1)
         }
         Text(
             arrival.etaText(),
             color = WidgetText,
-            fontSize = 21.sp,
+            fontSize = 17.sp,
             fontWeight = FontWeight.Bold,
         )
     }

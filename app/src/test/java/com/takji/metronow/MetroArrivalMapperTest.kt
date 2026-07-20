@@ -76,11 +76,11 @@ class MetroArrivalMapperTest {
     }
 
     @Test
-    fun mapsBranchDirectionAndExpressService() {
+    fun mapsLineTwoBranchDirectionAsRegularService() {
         val dto = MetroArrivalDto(
             subwayId = "1002",
             updnLine = "상행/내선",
-            btrainSttus = "급행",
+            btrainSttus = "일반",
             barvlDt = "75",
             arvlMsg2 = "진입",
             arvlCd = "0",
@@ -96,9 +96,33 @@ class MetroArrivalMapperTest {
         )
 
         assertEquals(Direction.UP, result.direction)
-        assertEquals("급행", result.serviceLabel())
-        assertEquals("급행 · 진입", result.statusWithService())
+        assertNull(result.serviceLabel())
+        assertEquals("진입", result.statusWithService())
         assertEquals("성수 방면", MetroBranch.SEONGSU_BRANCH.directionLabel(Direction.UP, MetroLine.LINE_2))
         assertEquals("신설동 방면", MetroBranch.SEONGSU_BRANCH.directionLabel(Direction.DOWN, MetroLine.LINE_2))
+    }
+
+    @Test
+    fun mapsLineNineExpressService() {
+        val dto = MetroArrivalDto(
+            subwayId = "1009",
+            updnLine = "상행",
+            btrainSttus = "급행",
+            barvlDt = "75",
+            arvlMsg2 = "진입",
+            arvlCd = "0",
+        )
+
+        val result = requireNotNull(
+            mapper.map(
+                dto = dto,
+                expectedLine = MetroLine.LINE_9,
+                nowMillis = System.currentTimeMillis(),
+            ),
+        )
+
+        assertEquals(Direction.UP, result.direction)
+        assertEquals("급행", result.serviceLabel())
+        assertEquals("급행 · 진입", result.statusWithService())
     }
 }

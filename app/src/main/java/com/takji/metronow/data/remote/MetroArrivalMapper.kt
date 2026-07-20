@@ -3,6 +3,7 @@ package com.takji.metronow.data.remote
 import com.takji.metronow.domain.model.ArrivalPosition
 import com.takji.metronow.domain.model.Direction
 import com.takji.metronow.domain.model.MetroArrival
+import com.takji.metronow.domain.model.MetroBranch
 import com.takji.metronow.domain.model.MetroLine
 import java.time.LocalDateTime
 import java.time.ZoneId
@@ -12,9 +13,14 @@ class MetroArrivalMapper {
     private val receivedAtFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
     private val seoulZone = ZoneId.of("Asia/Seoul")
 
-    fun map(dto: MetroArrivalDto, expectedLine: MetroLine, nowMillis: Long): MetroArrival? {
+    fun map(
+        dto: MetroArrivalDto,
+        expectedLine: MetroLine,
+        nowMillis: Long,
+        branch: MetroBranch = MetroBranch.MAIN,
+    ): MetroArrival? {
         if (dto.subwayId != expectedLine.apiId) return null
-        val direction = direction(dto.updnLine, expectedLine) ?: return null
+        val direction = direction(dto.updnLine, expectedLine, branch) ?: return null
         val receivedAt = parseReceivedAt(dto.recptnDt) ?: nowMillis
         val status = dto.arvlMsg2.orEmpty().ifBlank { dto.arvlMsg3.orEmpty() }.ifBlank { "운행 중" }
         return MetroArrival(
@@ -34,9 +40,13 @@ class MetroArrivalMapper {
         )
     }
 
-    private fun direction(raw: String?, line: MetroLine): Direction? {
+    private fun direction(raw: String?, line: MetroLine, branch: MetroBranch): Direction? {
         val value = raw.orEmpty()
         return when {
+            line == MetroLine.LINE_2 && branch != MetroBranch.MAIN &&
+                (value.contains("상행") || value.contains("내선")) -> Direction.UP
+            line == MetroLine.LINE_2 && branch != MetroBranch.MAIN &&
+                (value.contains("하행") || value.contains("외선")) -> Direction.DOWN
             line == MetroLine.LINE_2 && value.contains("내선") -> Direction.INNER
             line == MetroLine.LINE_2 && value.contains("외선") -> Direction.OUTER
             value.contains("상행") -> Direction.UP

@@ -11,4 +11,11 @@ data class MetroPreset(
     val stationApiName: String,
     val direction: Direction,
     val createdAtMillis: Long = System.currentTimeMillis(),
-)
+) {
+    val branch: MetroBranch
+        get() = MetroBranch.fromStationId(stationId)
+
+    fun directionLabel(value: Direction = direction): String = branch.directionLabel(value, line)
+
+    fun routeDisplayName(): String = branch.displayName?.let { "${line.displayName} $it" } ?: line.displayName
+}

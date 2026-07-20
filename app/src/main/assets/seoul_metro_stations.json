@@ -26,7 +26,13 @@
         {"name":"서초"},{"name":"방배"},{"name":"사당"},{"name":"낙성대"},{"name":"서울대입구"},{"name":"봉천"},
         {"name":"신림"},{"name":"신대방"},{"name":"구로디지털단지"},{"name":"대림"},{"name":"신도림"},{"name":"문래"},
         {"name":"영등포구청"},{"name":"당산"},{"name":"합정"},{"name":"홍대입구"},{"name":"신촌"},{"name":"이대"},
-        {"name":"아현"},{"name":"충정로"}
+        {"name":"아현"},{"name":"충정로"},
+        {"name":"성수","branch":"SEONGSU_BRANCH"},{"name":"용답","branch":"SEONGSU_BRANCH"},
+        {"name":"신답","branch":"SEONGSU_BRANCH"},{"name":"용두","branch":"SEONGSU_BRANCH"},
+        {"name":"신설동","branch":"SEONGSU_BRANCH"},
+        {"name":"신도림","branch":"SINJEONG_BRANCH"},{"name":"도림천","branch":"SINJEONG_BRANCH"},
+        {"name":"양천구청","branch":"SINJEONG_BRANCH"},{"name":"신정네거리","branch":"SINJEONG_BRANCH"},
+        {"name":"까치산","branch":"SINJEONG_BRANCH"}
       ]
     },
     {

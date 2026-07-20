@@ -4,6 +4,7 @@ import android.content.Context
 import com.google.gson.Gson
 import com.takji.metronow.domain.model.Direction
 import com.takji.metronow.domain.model.DirectionDescription
+import com.takji.metronow.domain.model.MetroBranch
 import com.takji.metronow.domain.model.MetroLine
 import com.takji.metronow.domain.model.Station
 import com.takji.metronow.domain.model.StationNeighbors
@@ -18,12 +19,15 @@ class StationCatalog(context: Context, gson: Gson = Gson()) {
         val asset = gson.fromJson(json, StationAsset::class.java)
         stations = asset.lines.flatMap { line ->
             line.stations.mapIndexed { index, item ->
+                val branch = runCatching { MetroBranch.valueOf(item.branch ?: MetroBranch.MAIN.name) }
+                    .getOrDefault(MetroBranch.MAIN)
                 Station(
-                    id = "${line.number}-${item.name}",
+                    id = branch.stationId(line.number, item.name),
                     lineNumber = line.number,
                     displayName = if (item.name.endsWith("역")) item.name else "${item.name}역",
                     apiName = item.apiName ?: item.name.removeSuffix("역"),
                     order = index,
+                    branch = branch,
                 )
             }
         }
@@ -35,7 +39,8 @@ class StationCatalog(context: Context, gson: Gson = Gson()) {
             station.line == line && (
                 normalized.isBlank() ||
                     station.displayName.contains(normalized, ignoreCase = true) ||
-                    station.apiName.contains(normalized, ignoreCase = true)
+                    station.apiName.contains(normalized, ignoreCase = true) ||
+                    station.branch.displayName?.contains(normalized, ignoreCase = true) == true
                 )
         }
     }
@@ -47,9 +52,9 @@ class StationCatalog(context: Context, gson: Gson = Gson()) {
 
     fun neighbors(stationId: String, direction: Direction): StationNeighbors? {
         val current = station(stationId) ?: return null
-        val list = stationsFor(current.line)
+        val list = stations.filter { it.line == current.line && it.branch == current.branch }
         val index = list.indexOfFirst { it.id == current.id }.takeIf { it >= 0 } ?: return null
-        val loops = current.line == MetroLine.LINE_2
+        val loops = current.line == MetroLine.LINE_2 && current.branch == MetroBranch.MAIN
         fun at(raw: Int): Station = when {
             loops -> list[(raw + list.size) % list.size]
             else -> list[raw.coerceIn(0, list.lastIndex)]
@@ -62,17 +67,23 @@ class StationCatalog(context: Context, gson: Gson = Gson()) {
 
     fun directionDescriptions(stationId: String): List<DirectionDescription> {
         val current = station(stationId) ?: return emptyList()
-        return Direction.optionsFor(current.line).map { direction ->
+        return current.branch.directions(current.line).map { direction ->
             DirectionDescription(
                 direction = direction,
-                title = direction.label(current.line),
+                title = current.branch.directionLabel(direction, current.line),
                 subtitle = "→ ${directionHint(stationId, direction)}",
             )
         }
     }
 
+    fun directionsFor(stationId: String): List<Direction> {
+        val current = station(stationId) ?: return emptyList()
+        return current.branch.directions(current.line)
+    }
+
     fun directionHint(stationId: String, direction: Direction): String {
         val current = station(stationId) ?: return "방면 정보 없음"
+        current.branch.destination(direction)?.let { return "$it 방면" }
         if (current.line == MetroLine.LINE_2) {
             val hubs = setOf("잠실", "성수", "왕십리", "시청", "홍대입구", "신도림", "사당", "교대", "강남")
             val found = mutableListOf<String>()
@@ -98,5 +109,9 @@ class StationCatalog(context: Context, gson: Gson = Gson()) {
 
     private data class StationAsset(val lines: List<LineAsset>)
     private data class LineAsset(val number: String, val stations: List<StationAssetItem>)
-    private data class StationAssetItem(val name: String, val apiName: String? = null)
+    private data class StationAssetItem(
+        val name: String,
+        val apiName: String? = null,
+        val branch: String? = null,
+    )
 }

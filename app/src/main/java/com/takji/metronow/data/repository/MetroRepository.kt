@@ -31,7 +31,7 @@ class MetroRepository(
                 throw MetroApiException(response.result?.message ?: response.errorMessage?.message ?: "API 요청 실패")
             }
             val mapped = response.arrivals.orEmpty()
-                .mapNotNull { mapper.map(it, preset.line, nowMillis) }
+                .mapNotNull { mapper.map(it, preset.line, nowMillis, preset.branch) }
                 .sortedWith(compareBy(nullsLast()) { it.secondsUntilArrival })
 
             val primary = mapped.filter { it.direction == preset.direction }.take(3)

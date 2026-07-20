@@ -165,7 +165,7 @@ private fun WidgetConfigScreen(
                         Column(Modifier.weight(1f)) {
                             Text(preset.name, fontWeight = FontWeight.Bold)
                             Text(
-                                "${preset.line.displayName} ${preset.stationDisplayName} · ${preset.direction.label(preset.line)}",
+                                "${preset.routeDisplayName()} ${preset.stationDisplayName} · ${preset.directionLabel()}",
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 style = MaterialTheme.typography.bodyMedium,
                             )

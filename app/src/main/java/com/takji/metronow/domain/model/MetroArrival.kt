@@ -28,6 +28,10 @@ data class MetroArrival(
     val position: ArrivalPosition,
     val receivedAtMillis: Long,
 ) {
+    fun serviceLabel(): String? = trainType.trim().takeIf { it.isNotEmpty() && it != "일반" }
+
+    fun statusWithService(): String = serviceLabel()?.let { "$it · $statusText" } ?: statusText
+
     fun etaText(nowMillis: Long = System.currentTimeMillis()): String {
         val original = secondsUntilArrival ?: return statusText.ifBlank { "운행 중" }
         val elapsed = max(0L, (nowMillis - receivedAtMillis) / 1_000L).toInt()

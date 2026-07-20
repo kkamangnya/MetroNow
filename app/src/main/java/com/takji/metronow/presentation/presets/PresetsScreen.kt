@@ -156,7 +156,7 @@ private fun PresetRow(preset: MetroPreset, widgetCount: Int, onEdit: () -> Unit,
         Column(Modifier.weight(1f)) {
             Text(preset.name, style = MaterialTheme.typography.titleMedium)
             Text(
-                "${preset.line.displayName} ${preset.stationDisplayName} · ${preset.direction.label(preset.line)}",
+                "${preset.routeDisplayName()} ${preset.stationDisplayName} · ${preset.directionLabel()}",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodyMedium,
             )
@@ -188,8 +188,13 @@ private fun PresetEditor(
     LaunchedEffect(line) {
         if (station.line != line) {
             station = catalog.stationsFor(line).first()
-            direction = Direction.optionsFor(line).first()
+            direction = catalog.directionsFor(station.id).first()
         }
+    }
+
+    LaunchedEffect(station.id) {
+        val options = catalog.directionsFor(station.id)
+        if (direction !in options) direction = options.first()
     }
 
     Column(
@@ -234,7 +239,7 @@ private fun PresetEditor(
         OutlinedButton(onClick = { searchingStation = !searchingStation }, modifier = Modifier.fillMaxWidth()) {
             Icon(Icons.Outlined.Search, contentDescription = null)
             Spacer(Modifier.width(8.dp))
-            Text(station.displayName, modifier = Modifier.weight(1f))
+            Text(station.selectionLabel, modifier = Modifier.weight(1f))
             Text(if (searchingStation) "닫기" else "변경")
         }
         if (searchingStation) {
@@ -249,7 +254,7 @@ private fun PresetEditor(
             LazyColumn(Modifier.height(180.dp)) {
                 items(catalog.stationsFor(line, stationQuery), key = { it.id }) { item ->
                     Text(
-                        item.displayName,
+                        item.selectionLabel,
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable { station = item; searchingStation = false; stationQuery = "" }

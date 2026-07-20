@@ -21,7 +21,7 @@ object PreviewData {
                 direction = Direction.OUTER,
                 trainNumber = "2257",
                 destination = "성수행",
-                trainType = "일반",
+                trainType = "급행",
                 statusText = "전역 출발",
                 detailText = "역삼 출발",
                 arrivalCode = "3",

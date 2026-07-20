@@ -80,6 +80,33 @@ class MetroRepositoryTest {
     }
 
     @Test
+    fun filtersLineTwoBranchUsingUpAndDownDirections() = runTest {
+        val branchPreset = preset.copy(
+            stationId = "2-seongsu-branch-용답",
+            stationDisplayName = "용답역",
+            stationApiName = "용답",
+            direction = Direction.UP,
+        )
+        val repository = MetroRepository(
+            FakeRemote(
+                MetroArrivalResponse(
+                    errorMessage = SeoulApiMessageDto(code = "INFO-000", message = "정상 처리되었습니다."),
+                    arrivals = listOf(
+                        arrival("상행/내선", "60", "2011"),
+                        arrival("하행/외선", "120", "2012"),
+                    ),
+                ),
+            ),
+            MetroArrivalMapper(),
+        )
+
+        val snapshot = repository.fetchSnapshot(branchPreset, "sample")
+
+        assertEquals(listOf("2011"), snapshot.primary.map { it.trainNumber })
+        assertEquals(listOf("2012"), snapshot.opposite.map { it.trainNumber })
+    }
+
+    @Test
     fun convertsApiErrorToUiState() = runTest {
         val repository = MetroRepository(
             FakeRemote(MetroArrivalResponse(errorMessage = SeoulApiMessageDto(code = "ERROR-301", message = "KEY 오류"))),

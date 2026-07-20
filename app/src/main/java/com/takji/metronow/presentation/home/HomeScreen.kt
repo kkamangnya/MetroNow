@@ -105,7 +105,7 @@ fun HomeScreen(
             Row(Modifier.fillMaxWidth()) {
                 Detail("노선", preset.line.displayName, Modifier.weight(1f))
                 Detail("역", preset.stationDisplayName, Modifier.weight(1f))
-                Detail("방향", preset.direction.label(preset.line), Modifier.weight(1f))
+                Detail("방향", preset.directionLabel(), Modifier.weight(1f))
             }
         } else {
             Text("프리셋을 추가해 첫 위젯을 만들어보세요.", color = MaterialTheme.colorScheme.onSurfaceVariant)

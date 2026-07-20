@@ -70,8 +70,13 @@ fun OnboardingScreen(
     LaunchedEffect(line) {
         if (station.line != line) {
             station = catalog.stationsFor(line).first()
-            direction = Direction.optionsFor(line).first()
+            direction = catalog.directionsFor(station.id).first()
         }
+    }
+
+    LaunchedEffect(station.id) {
+        val options = catalog.directionsFor(station.id)
+        if (direction !in options) direction = options.first()
     }
 
     Surface(
@@ -184,7 +189,7 @@ private fun ColumnScope.StationStep(catalog: StationCatalog, line: MetroLine, se
     LazyColumn(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         items(catalog.stationsFor(line, query), key = { it.id }) { station ->
             SelectionRow(
-                title = station.displayName,
+                title = station.selectionLabel,
                 subtitle = station.apiName.takeIf { it != station.displayName.removeSuffix("역") }?.let { "API: $it" },
                 selected = station.id == selected.id,
                 color = Color(line.colorHex),

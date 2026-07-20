@@ -5,10 +5,12 @@ MetroNow는 선택한 서울 지하철 노선·역을 기준으로 양방향 실
 ## 주요 기능
 
 - 서울 지하철 1~9호선과 노선별 역 검색
+- 2호선 본선·성수지선·신정지선과 지선별 종착 방면 선택
 - 2호선 내선/외선, 일반 노선 상행/하행 및 실제 진행 방면 안내
 - 이름·노선·역·방향으로 구성된 여러 프리셋 저장
 - 프리셋별 실시간 도착정보, 도착 상태, 보정된 남은 시간 표시
 - 한 위젯에서 양방향 열차·방면·진행 위치를 동시에 표시
+- API 열차종류에 따른 급행·특급·ITX 강조 표시
 - Small/Medium/Large 크기에 대응하는 반투명 Glance 위젯
 - `appWidgetId`마다 서로 다른 프리셋 연결
 - 위젯 수동 새로고침과 WorkManager 주기 갱신
@@ -59,7 +61,7 @@ http://swopenapi.seoul.go.kr/api/subway/{KEY}/json/realtimeStationArrival/0/20/{
 사용 필드:
 
 - `subwayId`, `updnLine`: 노선·방향 필터
-- `trainLineNm`, `btrainNo`, `btrainSttus`: 행선지·열차 정보
+- `trainLineNm`, `btrainNo`, `btrainSttus`: 행선지·열차 정보와 급행·특급·ITX 구분
 - `barvlDt`: 도착 예정 초
 - `arvlMsg2`, `arvlMsg3`, `arvlCd`: 운행 상태와 상대 위치
 - `recptnDt`: 데이터 생성 시각과 남은 시간 보정

@@ -35,9 +35,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.takji.metronow.domain.model.ArrivalSnapshot
-import com.takji.metronow.domain.model.Direction
 import com.takji.metronow.domain.model.MetroArrival
-import com.takji.metronow.domain.model.MetroLine
 import com.takji.metronow.domain.model.MetroPreset
 import com.takji.metronow.domain.model.StationNeighbors
 import com.takji.metronow.domain.model.WidgetAppearance
@@ -83,7 +81,7 @@ fun MetroWidgetPreview(
                     fontWeight = FontWeight.Bold,
                 )
                 Text(
-                    "${preset.line.displayName} · 양방향",
+                    "${preset.routeDisplayName()} · 양방향",
                     color = WidgetMuted,
                     fontSize = 12.sp,
                     maxLines = 1,
@@ -254,8 +252,8 @@ private fun WidgetBody(
                 ?: "도착정보 없음"
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 DirectionCard(
-                    direction = preset.direction,
-                    line = preset.line,
+                    directionLabel = preset.directionLabel(),
+                    lineColor = Color(preset.line.colorHex),
                     hint = directionHint,
                     arrow = "←",
                     arrivals = snapshot.primary,
@@ -264,8 +262,8 @@ private fun WidgetBody(
                     modifier = Modifier.weight(1f),
                 )
                 DirectionCard(
-                    direction = preset.direction.opposite(),
-                    line = preset.line,
+                    directionLabel = preset.directionLabel(preset.direction.opposite()),
+                    lineColor = Color(preset.line.colorHex),
                     hint = oppositeDirectionHint,
                     arrow = "→",
                     arrivals = snapshot.opposite,
@@ -280,8 +278,8 @@ private fun WidgetBody(
 
 @Composable
 private fun DirectionCard(
-    direction: Direction,
-    line: MetroLine,
+    directionLabel: String,
+    lineColor: Color,
     hint: String?,
     arrow: String,
     arrivals: List<MetroArrival>,
@@ -289,7 +287,6 @@ private fun DirectionCard(
     emptyMessage: String,
     modifier: Modifier = Modifier,
 ) {
-    val lineColor = Color(line.colorHex)
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(16.dp))
@@ -297,7 +294,7 @@ private fun DirectionCard(
             .padding(horizontal = 12.dp, vertical = 10.dp),
     ) {
         Text(
-            "$arrow ${direction.label(line)}",
+            "$arrow $directionLabel",
             color = lineColor,
             fontSize = 12.sp,
             fontWeight = FontWeight.Bold,
@@ -326,7 +323,13 @@ private fun DirectionCard(
 private fun ArrivalRow(arrival: MetroArrival) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
-            Text(arrival.statusText, color = WidgetText, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+            Text(
+                arrival.statusWithService(),
+                color = if (arrival.serviceLabel() != null) Color(0xFFFFC46B) else WidgetText,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+            )
             Text(arrival.destination, color = WidgetMuted, fontSize = 9.sp, maxLines = 1)
         }
         Text(

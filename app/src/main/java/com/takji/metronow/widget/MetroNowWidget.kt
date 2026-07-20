@@ -46,7 +46,6 @@ import androidx.glance.unit.ColorProvider
 import com.takji.metronow.MetroNowApplication
 import com.takji.metronow.R
 import com.takji.metronow.domain.model.ArrivalSnapshot
-import com.takji.metronow.domain.model.Direction
 import com.takji.metronow.domain.model.MetroArrival
 import com.takji.metronow.domain.model.MetroPreset
 import com.takji.metronow.domain.model.StationNeighbors
@@ -181,8 +180,7 @@ private fun MetroNowWidgetContent(
 
                 Row(GlanceModifier.fillMaxWidth()) {
                     DirectionPanel(
-                        direction = preset.direction,
-                        lineName = preset.line,
+                        directionLabel = preset.directionLabel(),
                         hint = primaryHint,
                         arrivals = snapshot.primary,
                         arrow = "←",
@@ -197,8 +195,7 @@ private fun MetroNowWidgetContent(
                     )
                     Spacer(GlanceModifier.width(7.dp))
                     DirectionPanel(
-                        direction = preset.direction.opposite(),
-                        lineName = preset.line,
+                        directionLabel = preset.directionLabel(preset.direction.opposite()),
                         hint = oppositeHint,
                         arrivals = snapshot.opposite,
                         arrow = "→",
@@ -254,7 +251,7 @@ private fun WidgetHeader(
             )
             if (!compact) {
                 Text(
-                    "${preset.line.displayName} · 양방향",
+                    "${preset.routeDisplayName()} · 양방향",
                     style = TextStyle(color = mutedText, fontSize = 9.sp),
                     maxLines = 1,
                 )
@@ -366,8 +363,7 @@ private fun TransitHalf(
 
 @Composable
 private fun DirectionPanel(
-    direction: Direction,
-    lineName: com.takji.metronow.domain.model.MetroLine,
+    directionLabel: String,
     hint: String?,
     arrivals: List<MetroArrival>,
     arrow: String,
@@ -387,7 +383,7 @@ private fun DirectionPanel(
             .padding(horizontal = if (compact) 7.dp else 9.dp, vertical = if (compact) 6.dp else 7.dp),
     ) {
         Text(
-            "$arrow ${direction.label(lineName)}",
+            "$arrow $directionLabel",
             style = TextStyle(color = lineColor, fontWeight = FontWeight.Bold, fontSize = if (compact) 9.sp else 10.sp),
             maxLines = 1,
         )
@@ -420,9 +416,14 @@ private fun CompactArrival(
 ) {
     Row(verticalAlignment = Alignment.Vertical.CenterVertically) {
         Column(GlanceModifier.defaultWeight()) {
+            val service = arrival.serviceLabel()
             Text(
-                arrival.statusText,
-                style = TextStyle(color = primaryText, fontSize = if (compact) 8.sp else 9.sp, fontWeight = FontWeight.Bold),
+                arrival.statusWithService(),
+                style = TextStyle(
+                    color = if (service != null) ColorProvider(Color(0xFFFFC46B)) else primaryText,
+                    fontSize = if (compact) 8.sp else 9.sp,
+                    fontWeight = FontWeight.Bold,
+                ),
                 maxLines = 1,
             )
             if (!compact) {

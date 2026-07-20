@@ -4,6 +4,7 @@ import com.takji.metronow.data.remote.MetroArrivalDto
 import com.takji.metronow.data.remote.MetroArrivalMapper
 import com.takji.metronow.domain.model.ArrivalPosition
 import com.takji.metronow.domain.model.Direction
+import com.takji.metronow.domain.model.MetroBranch
 import com.takji.metronow.domain.model.MetroLine
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -72,5 +73,32 @@ class MetroArrivalMapperTest {
         val result = requireNotNull(mapper.map(dto, MetroLine.LINE_2, System.currentTimeMillis()))
         assertEquals(ArrivalPosition.TWO_OR_MORE_STATIONS_AWAY, result.position)
         assertEquals("2전역 전", result.statusText)
+    }
+
+    @Test
+    fun mapsBranchDirectionAndExpressService() {
+        val dto = MetroArrivalDto(
+            subwayId = "1002",
+            updnLine = "상행/내선",
+            btrainSttus = "급행",
+            barvlDt = "75",
+            arvlMsg2 = "진입",
+            arvlCd = "0",
+        )
+
+        val result = requireNotNull(
+            mapper.map(
+                dto = dto,
+                expectedLine = MetroLine.LINE_2,
+                nowMillis = System.currentTimeMillis(),
+                branch = MetroBranch.SEONGSU_BRANCH,
+            ),
+        )
+
+        assertEquals(Direction.UP, result.direction)
+        assertEquals("급행", result.serviceLabel())
+        assertEquals("급행 · 진입", result.statusWithService())
+        assertEquals("성수 방면", MetroBranch.SEONGSU_BRANCH.directionLabel(Direction.UP, MetroLine.LINE_2))
+        assertEquals("신설동 방면", MetroBranch.SEONGSU_BRANCH.directionLabel(Direction.DOWN, MetroLine.LINE_2))
     }
 }
